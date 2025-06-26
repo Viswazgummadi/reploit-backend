@@ -18,7 +18,10 @@ def create_app(config_object_path='config.Config'):
     app.config.from_object(config_object_path)
 
     app.config['SECRET_KEY'] = app.config.get('JWT_SECRET_KEY') or app.config.get('SECRET_KEY')
-    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=10)
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=15)
+    # ✅ CRUCIAL FIX for deployed OAuth: Set SameSite policy for cookies
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+    app.config['SESSION_COOKIE_SECURE'] = True # This requires your Render backend is served over HTTPS (which it is)
     # Apply a simple global CORS. The real work is now on the blueprints.
     CORS(app)
     
