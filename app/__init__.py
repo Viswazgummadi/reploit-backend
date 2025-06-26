@@ -4,7 +4,7 @@ import os
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
-from flask_cors import CORS
+from flask_cors import CORS # This import is crucial for global CORS
 from flask_migrate import Migrate
 from cryptography.fernet import Fernet
 from cryptography.fernet import InvalidToken as FernetInvalidToken
@@ -12,7 +12,7 @@ from cryptography.fernet import InvalidToken as FernetInvalidToken
 db = SQLAlchemy()
 bcrypt = Bcrypt()
 migrate = Migrate()
-# fernet_cipher = None # This global variable is no longer needed, app.fernet_cipher is used
+# The global fernet_cipher variable is not needed, as it's attached to app.fernet_cipher
 
 def create_app(config_object_path='config.Config'):
     """
@@ -22,20 +22,21 @@ def create_app(config_object_path='config.Config'):
     # Load configuration from config.py
     app.config.from_object(config_object_path)
 
-    # --- ✅ CRUCIAL ADDITION FOR FLASK SESSIONS ---
+    # --- CRUCIAL FOR FLASK SESSIONS (and JWT) ---
     # Flask sessions require a SECRET_KEY. We are reusing the JWT_SECRET_KEY
     # from your config, or falling back to the general SECRET_KEY.
     app.config['SECRET_KEY'] = app.config.get('JWT_SECRET_KEY') or app.config.get('SECRET_KEY')
     if not app.config['SECRET_KEY']:
         app.logger.error("FLASK_SECRET_KEY (or JWT_SECRET_KEY) is not set! Flask sessions will not work securely.")
-        # In production, you might want to raise an error here or use a dummy key for dev only.
+        # In production, you might want to raise an error here to prevent insecure operation.
 
-    # Global CORS Initialization
-    # This uses app.config['CORS_ORIGINS'] if set, otherwise a very permissive default.
-    # Note: app.config['CORS_ORIGINS'] might be a comma-separated string,
-    # so .split(',') is necessary to turn it into a list of origins.
+    # --- Global CORS Initialization ---
+    # This is the primary place for CORS configuration.
+    # It ensures all /api/* routes handle OPTIONS preflight requests correctly
+    # and allow the specified origins and methods.
     cors_origins = app.config['CORS_ORIGINS'].split(',') if app.config.get('CORS_ORIGINS') else "*"
-    CORS(app, resources={r"/api/*": {"origins": cors_origins}})
+    # `methods` explicitly lists all HTTP methods your API uses, including 'OPTIONS'.
+    CORS(app, resources={r"/api/*": {"methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"], "origins": cors_origins}})
     app.logger.info(f"CORS initialized with origins: {cors_origins}")
     
     try:
@@ -70,6 +71,7 @@ def create_app(config_object_path='config.Config'):
         from .models import models
 
     # --- Register Blueprints ---
+    # Import blueprints here. Ensure all your blueprint files are correctly named and accessible.
     from .routes.general_routes import general_bp
     from .routes.admin_routes import admin_bp
     from .routes.chat_routes import chat_bp
@@ -77,6 +79,10 @@ def create_app(config_object_path='config.Config'):
     from .routes.github_routes import github_bp
     from .routes.google_routes import google_bp
 
+    # Register blueprints with their respective URL prefixes.
+    # The trailing slash in the url_prefix here means routes defined within
+    # the blueprint (e.g., '@bp.route('/my-route')') will resolve to '/prefix/my-route'.
+    # If the blueprint route is '@bp.route('/')', it resolves to '/prefix/'.
     app.register_blueprint(general_bp, url_prefix='/api')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(chat_bp, url_prefix='/api/chat')
