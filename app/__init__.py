@@ -7,6 +7,7 @@ from flask_bcrypt import Bcrypt
 from flask_cors import CORS
 from flask_migrate import Migrate
 from cryptography.fernet import Fernet
+from datetime import timedelta # ✅ ADD THIS IMPORT
 
 db = SQLAlchemy()
 bcrypt = Bcrypt()
@@ -17,7 +18,7 @@ def create_app(config_object_path='config.Config'):
     app.config.from_object(config_object_path)
 
     app.config['SECRET_KEY'] = app.config.get('JWT_SECRET_KEY') or app.config.get('SECRET_KEY')
-
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=10)
     # Apply a simple global CORS. The real work is now on the blueprints.
     CORS(app)
     
