@@ -12,7 +12,7 @@ from cryptography.fernet import InvalidToken as FernetInvalidToken
 db = SQLAlchemy()
 bcrypt = Bcrypt()
 migrate = Migrate()
-fernet_cipher = None # This will be set on the app instance later
+# fernet_cipher = None # This global variable is no longer needed, app.fernet_cipher is used
 
 def create_app(config_object_path='config.Config'):
     """
@@ -22,10 +22,21 @@ def create_app(config_object_path='config.Config'):
     # Load configuration from config.py
     app.config.from_object(config_object_path)
 
+    # --- ✅ CRUCIAL ADDITION FOR FLASK SESSIONS ---
+    # Flask sessions require a SECRET_KEY. We are reusing the JWT_SECRET_KEY
+    # from your config, or falling back to the general SECRET_KEY.
+    app.config['SECRET_KEY'] = app.config.get('JWT_SECRET_KEY') or app.config.get('SECRET_KEY')
+    if not app.config['SECRET_KEY']:
+        app.logger.error("FLASK_SECRET_KEY (or JWT_SECRET_KEY) is not set! Flask sessions will not work securely.")
+        # In production, you might want to raise an error here or use a dummy key for dev only.
+
     # Global CORS Initialization
     # This uses app.config['CORS_ORIGINS'] if set, otherwise a very permissive default.
-    CORS(app, resources={r"/api/*": {"origins": app.config['CORS_ORIGINS'].split(',') if app.config['CORS_ORIGINS'] else "*"}})
-    app.logger.info(f"CORS initialized with origins: {app.config['CORS_ORIGINS']}")
+    # Note: app.config['CORS_ORIGINS'] might be a comma-separated string,
+    # so .split(',') is necessary to turn it into a list of origins.
+    cors_origins = app.config['CORS_ORIGINS'].split(',') if app.config.get('CORS_ORIGINS') else "*"
+    CORS(app, resources={r"/api/*": {"origins": cors_origins}})
+    app.logger.info(f"CORS initialized with origins: {cors_origins}")
     
     try:
         os.makedirs(app.instance_path)
