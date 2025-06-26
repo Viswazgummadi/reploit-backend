@@ -12,7 +12,7 @@ from ..models.models import db, AdminUser, APIKey, ConfiguredModel
 from .. import bcrypt # This imports bcrypt from your __init__.py if set up as a package-level variable
 from ..core_config.static_model_data import get_predefined_model_suggestions
 
-admin_bp = Blueprint('admin_api_routes', __name__)
+admin_bp = Blueprint('admin_api_routes', __name__,url_prefix='/api/admin')
 CORS(admin_bp, supports_credentials=True)
 
 @admin_bp.route('/login/', methods=['POST'])

@@ -4,9 +4,9 @@ from flask import Blueprint, request, jsonify, current_app
 # from flask_cors import CORS # ✅ REMOVED: Rely on global CORS config in __init__.py
 from ..models import db, DataSource
 from ..utils.auth import token_required
-
-data_source_bp = Blueprint('data_source_api_routes', __name__)
-
+from flask_cors import CORS
+data_source_bp = Blueprint('data_source_api_routes', __name__,url_prefix='/api/data-sources')
+CORS(data_source_bp, supports_credentials=True)
 # ✅ REMOVED: CORS(data_source_bp, supports_credentials=True)
 # This is now handled by the global CORS configuration in your app factory (__init__.py)
 

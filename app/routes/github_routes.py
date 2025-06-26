@@ -5,10 +5,10 @@ from flask_cors import CORS # ✅ Ensure CORS is imported
 from ..utils.auth import token_required, decrypt_value
 from ..models.models import db, APIKey, DataSource
 
-github_bp = Blueprint('github_routes', __name__)
+github_bp = Blueprint('github_routes', __name__, url_prefix='/api/connect/github')
 CORS(github_bp, supports_credentials=True)
 
-@github_bp.route('/connect/github/available-repos/', methods=['GET'])
+@github_bp.route('/available-repos/', methods=['GET'])
 @token_required
 def get_available_github_repos(current_admin_username):
     """

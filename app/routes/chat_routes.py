@@ -7,7 +7,7 @@ from flask_cors import CORS # ✅ Ensure CORS is imported
 from ..utils.auth import decrypt_value
 from ..models.models import db, APIKey, ConfiguredModel, DataSource
 
-chat_bp = Blueprint('chat_api_routes', __name__)
+chat_bp = Blueprint('chat_api_routes', __name__, url_prefix='/api/chat')
 CORS(chat_bp, supports_credentials=True)
 
 # ✅ CRUCIAL FIX: Add trailing slash

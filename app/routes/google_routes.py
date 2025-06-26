@@ -12,7 +12,7 @@ from flask_cors import CORS # ✅ Ensure CORS is imported
 from ..models import db, APIKey
 from ..utils.auth import token_required, encrypt_value, decrypt_value
 
-google_bp = Blueprint('google_routes', __name__)
+google_bp = Blueprint('google_routes', __name__, url_prefix='/api/connect/google')
 CORS(google_bp, supports_credentials=True)
 
 SCOPES = ['https://www.googleapis.com/auth/userinfo.profile', 'https://www.googleapis.com/auth/drive.readonly']
@@ -40,7 +40,7 @@ def get_google_flow():
         redirect_uri=current_app.config['GOOGLE_REDIRECT_URI']
     )
 
-@google_bp.route('/connect/google/auth-url/', methods=['GET'])
+@google_bp.route('/auth-url/', methods=['GET'])
 @token_required
 def get_google_auth_url(current_admin_username):
     flow = get_google_flow()
@@ -101,7 +101,7 @@ def google_callback():
     return redirect(f"{current_app.config['CORS_ORIGINS'].split(',')[0]}/admin/repos?gauth=success")
 
 
-@google_bp.route('/connect/google/available-files/', methods=['GET'])
+@google_bp.route('/available-files/', methods=['GET'])
 @token_required
 def get_available_google_files(current_admin_username):
     refresh_token_entry = db.session.query(APIKey).filter_by(service_name='GOOGLE_REFRESH_TOKEN').first()

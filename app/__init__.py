@@ -84,12 +84,12 @@ def create_app(config_object_path='config.Config'):
     # The trailing slash in the url_prefix here means routes defined within
     # the blueprint (e.g., '@bp.route('/my-route')') will resolve to '/prefix/my-route'.
     # If the blueprint route is '@bp.route('/')', it resolves to '/prefix/'.
-    app.register_blueprint(general_bp, url_prefix='/api')
-    app.register_blueprint(admin_bp, url_prefix='/api/admin')
-    app.register_blueprint(chat_bp, url_prefix='/api/chat')
-    app.register_blueprint(data_source_bp, url_prefix='/api/data-sources')
-    app.register_blueprint(github_bp, url_prefix='/api') # Routes like /api/connect/github/...
-    app.register_blueprint(google_bp, url_prefix='/api') # Routes like /api/connect/google/...
+    app.register_blueprint(general_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(chat_bp)
+    app.register_blueprint(data_source_bp)
+    app.register_blueprint(github_bp) # Routes like /api/connect/github/...
+    app.register_blueprint(google_bp) # Routes like /api/connect/google/...
 
     app.logger.info("Flask app created and configured.")
     return app
