@@ -1,10 +1,12 @@
 import requests
 from flask import Blueprint, jsonify, current_app
+from flask_cors import CORS # ✅ Ensure CORS is imported
 
 from ..utils.auth import token_required, decrypt_value
 from ..models.models import db, APIKey, DataSource
 
 github_bp = Blueprint('github_routes', __name__)
+CORS(github_bp, supports_credentials=True)
 
 @github_bp.route('/connect/github/available-repos/', methods=['GET'])
 @token_required

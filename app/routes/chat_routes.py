@@ -2,11 +2,13 @@
 from flask import Blueprint, request, jsonify, current_app, Response, stream_with_context
 import google.generativeai as genai
 import json
+from flask_cors import CORS # ✅ Ensure CORS is imported
 
 from ..utils.auth import decrypt_value
 from ..models.models import db, APIKey, ConfiguredModel, DataSource
 
 chat_bp = Blueprint('chat_api_routes', __name__)
+CORS(chat_bp, supports_credentials=True)
 
 # ✅ CRUCIAL FIX: Add trailing slash
 @chat_bp.route('/available-models/', methods=['GET'])

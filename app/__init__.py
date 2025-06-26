@@ -4,7 +4,7 @@ import os
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
-from flask_cors import CORS # This import is crucial for global CORS
+from flask_cors import CORS 
 from flask_migrate import Migrate
 from cryptography.fernet import Fernet
 from cryptography.fernet import InvalidToken as FernetInvalidToken
@@ -34,10 +34,11 @@ def create_app(config_object_path='config.Config'):
     # This is the primary place for CORS configuration.
     # It ensures all /api/* routes handle OPTIONS preflight requests correctly
     # and allow the specified origins and methods.
-    cors_origins = app.config['CORS_ORIGINS'].split(',') if app.config.get('CORS_ORIGINS') else "*"
+    # cors_origins = app.config['CORS_ORIGINS'].split(',') if app.config.get('CORS_ORIGINS') else "*"
     # `methods` explicitly lists all HTTP methods your API uses, including 'OPTIONS'.
-    CORS(app, resources={r"/api/*": {"methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"], "origins": cors_origins}})
-    app.logger.info(f"CORS initialized with origins: {cors_origins}")
+    # CORS(app, resources={r"/api/*": {"methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"], "origins": cors_origins}})
+    CORS(app)
+    app.logger.info("Global CORS initialized. Blueprint-specific CORS will handle API routes.")
     
     try:
         os.makedirs(app.instance_path)

@@ -7,11 +7,13 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 import requests # ✅ Import requests for creds.refresh(requests.Request())
+from flask_cors import CORS # ✅ Ensure CORS is imported
 
 from ..models import db, APIKey
 from ..utils.auth import token_required, encrypt_value, decrypt_value
 
 google_bp = Blueprint('google_routes', __name__)
+CORS(google_bp, supports_credentials=True)
 
 SCOPES = ['https://www.googleapis.com/auth/userinfo.profile', 'https://www.googleapis.com/auth/drive.readonly']
 

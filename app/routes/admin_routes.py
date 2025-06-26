@@ -2,6 +2,7 @@
 import datetime
 import urllib.parse
 from flask import Blueprint, request, jsonify, current_app
+from flask_cors import CORS # ✅ Ensure CORS is imported
 
 import jwt # This imports the jwt library (PyJWT)
 
@@ -12,6 +13,7 @@ from .. import bcrypt # This imports bcrypt from your __init__.py if set up as a
 from ..core_config.static_model_data import get_predefined_model_suggestions
 
 admin_bp = Blueprint('admin_api_routes', __name__)
+CORS(admin_bp, supports_credentials=True)
 
 @admin_bp.route('/login/', methods=['POST'])
 def admin_login():
