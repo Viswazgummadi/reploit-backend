@@ -1,20 +1,20 @@
 # backend/app/routes/data_source_routes.py
 
 from flask import Blueprint, request, jsonify, current_app
-from flask_cors import CORS # ✅ 1. IMPORT CORS
+# from flask_cors import CORS # ✅ REMOVED: Rely on global CORS config in __init__.py
 from ..models import db, DataSource
 from ..utils.auth import token_required
 
 data_source_bp = Blueprint('data_source_api_routes', __name__)
 
-# ✅ 2. APPLY CORS TO THIS BLUEPRINT
-# This ensures that all routes within data_source_bp handle OPTIONS preflight requests correctly.
-CORS(data_source_bp, supports_credentials=True)
+# ✅ REMOVED: CORS(data_source_bp, supports_credentials=True)
+# This is now handled by the global CORS configuration in your app factory (__init__.py)
 
 @data_source_bp.route('/', methods=['GET'])
 def get_data_sources():
     """
     Fetches all connected data sources from the database.
+    This route is called as /api/data-sources/, so this definition is correct.
     """
     try:
         sources = DataSource.query.order_by(DataSource.created_at.desc()).all()
@@ -23,7 +23,8 @@ def get_data_sources():
         current_app.logger.error(f"Error fetching data sources: {e}", exc_info=True)
         return jsonify({"error": "Failed to retrieve data sources"}), 500
 
-@data_source_bp.route('/connect', methods=['POST'])
+# ✅ CRUCIAL FIX: Add trailing slash
+@data_source_bp.route('/connect/', methods=['POST'])
 def connect_data_source():
     """
     Creates a new DataSource record for any supported source type.
@@ -83,6 +84,7 @@ def connect_data_source():
 def delete_data_source(data_source_id):
     """
     Deletes a connected data source from the database.
+    This route with a dynamic ID at the end should NOT have a trailing slash.
     """
     try:
         source_to_delete = db.session.get(DataSource, data_source_id)
@@ -100,7 +102,8 @@ def delete_data_source(data_source_id):
         current_app.logger.error(f"Error deleting data source {data_source_id}: {e}", exc_info=True)
         return jsonify({"error": "Failed to delete data source"}), 500
 
-@data_source_bp.route('/<string:data_source_id>/reindex', methods=['POST'])
+# ✅ CRUCIAL FIX: Add trailing slash
+@data_source_bp.route('/<string:data_source_id>/reindex/', methods=['POST'])
 @token_required
 def reindex_data_source(current_admin_username, data_source_id):
     """
@@ -113,7 +116,8 @@ def reindex_data_source(current_admin_username, data_source_id):
     current_app.logger.info(f"Admin '{current_admin_username}' requested re-indexing for data source: {data_source_id}")
     return jsonify({"message": f"Re-indexing request for {source.name} received. Processing will begin shortly."}), 200
 
-@data_source_bp.route('/<string:data_source_id>/sync', methods=['POST'])
+# ✅ CRUCIAL FIX: Add trailing slash
+@data_source_bp.route('/<string:data_source_id>/sync/', methods=['POST'])
 @token_required
 def sync_data_source(current_admin_username, data_source_id):
     """
@@ -126,7 +130,8 @@ def sync_data_source(current_admin_username, data_source_id):
     current_app.logger.info(f"Admin '{current_admin_username}' requested sync for data source: {data_source_id}")
     return jsonify({"message": f"Sync request for {source.name} received. Changes will be processed."}), 200
 
-@data_source_bp.route('/<string:data_source_id>/delete-embeddings', methods=['DELETE'])
+# ✅ CRUCIAL FIX: Add trailing slash
+@data_source_bp.route('/<string:data_source_id>/delete-embeddings/', methods=['DELETE'])
 @token_required
 def delete_source_embeddings(current_admin_username, data_source_id):
     """
@@ -138,7 +143,9 @@ def delete_source_embeddings(current_admin_username, data_source_id):
     
     current_app.logger.info(f"Admin '{current_admin_username}' requested embedding deletion for data source: {data_source_id}")
     return jsonify({"message": f"Embeddings for {source.name} deleted successfully."}), 200
-@data_source_bp.route('/test', methods=['GET'])
+
+# ✅ CRUCIAL FIX: Add trailing slash
+@data_source_bp.route('/test/', methods=['GET'])
 def test_route():
     current_app.logger.info("Test route hit!")
     return jsonify({"message": "Test successful!"}), 200

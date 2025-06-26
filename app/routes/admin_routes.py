@@ -2,12 +2,9 @@
 import datetime
 import urllib.parse
 from flask import Blueprint, request, jsonify, current_app
-# REMOVED: from flask_cors import CORS # ✅ Removed this specific import here if it was redundant
 
 import jwt # This imports the jwt library (PyJWT)
-# Ensure flask_cors is imported IF it's not already globally available or needed for token_required.
-# For simplicity, we assume global CORS setup handles this now.
-# If you are using flask_cors decorators on individual routes or blueprints beyond global, keep this import.
+
 
 from ..utils.auth import token_required, encrypt_value, decrypt_value # Ensure these are imported
 from ..models.models import db, AdminUser, APIKey, ConfiguredModel
@@ -16,13 +13,6 @@ from ..core_config.static_model_data import get_predefined_model_suggestions
 
 admin_bp = Blueprint('admin_api_routes', __name__)
 
-# ✅ CRUCIAL: REMOVED THE CORS DECORATOR FROM THIS FILE.
-# We will rely on the global CORS configuration in backend/app/__init__.py.
-# This avoids conflicts and makes the CORS setup simpler and more robust.
-# If you had `CORS(admin_bp, supports_credentials=True)` previously, it's also removed.
-
-# --- ADMIN LOGIN ---
-# ✅ CRUCIAL FIX: Add trailing slash to match frontend call
 @admin_bp.route('/login/', methods=['POST'])
 def admin_login():
     data = request.get_json()
@@ -49,7 +39,7 @@ def admin_login():
         return jsonify({"error": "Invalid admin credentials"}), 401
 
 # --- Admin Profile ---
-@admin_bp.route('/profile', methods=['GET'])
+@admin_bp.route('/profile/', methods=['GET'])
 @token_required
 def admin_profile(current_admin_username):
     admin_user = db.session.query(AdminUser).filter_by(username=current_admin_username).first()
@@ -65,7 +55,7 @@ def admin_profile(current_admin_username):
     }), 200
 
 # --- API Keys Management ---
-@admin_bp.route('/settings/apikeys', methods=['GET'])
+@admin_bp.route('/settings/apikeys/', methods=['GET'])
 @token_required
 def get_api_keys_status(current_admin_username):
     if not current_app.fernet_cipher:
@@ -78,7 +68,7 @@ def get_api_keys_status(current_admin_username):
         current_app.logger.error(f"Error fetching API keys: {e}")
         return jsonify({"error": "Could not retrieve API keys."}), 500
 
-@admin_bp.route('/settings/apikeys', methods=['POST'])
+@admin_bp.route('/settings/apikeys/', methods=['POST'])
 @token_required
 def add_or_update_api_key(current_admin_username):
     if not current_app.fernet_cipher:
@@ -135,7 +125,7 @@ def delete_api_key(current_admin_username, service_name_encoded):
         return jsonify({"error": "Could not delete API key."}), 500
 
 # --- Configured Models Management ---
-@admin_bp.route('/configured-models', methods=['POST'])
+@admin_bp.route('/configured-models/', methods=['POST'])
 @token_required
 def add_configured_model(current_admin_username):
     data = request.get_json()
@@ -185,7 +175,7 @@ def add_configured_model(current_admin_username):
         current_app.logger.error(f"Error adding configured model: {e}", exc_info=True)
         return jsonify({"msg": "Failed to configure model", "error": str(e)}), 500
 
-@admin_bp.route('/configured-models', methods=['GET'])
+@admin_bp.route('/configured-models/', methods=['GET'])
 @token_required
 def get_configured_models(current_admin_username):
     try:
@@ -269,7 +259,7 @@ def delete_configured_model(current_admin_username, model_id):
         current_app.logger.error(f"Error deleting configured model {model_id}: {e}", exc_info=True)
         return jsonify({"msg": "Failed to delete model configuration", "error": str(e)}), 500
 
-@admin_bp.route('/model-suggestions', methods=['GET'])
+@admin_bp.route('/model-suggestions/', methods=['GET'])
 @token_required
 def get_model_suggestions_route(current_admin_username):
     try:

@@ -1,13 +1,15 @@
+# backend/app/routes/chat_routes.py
 from flask import Blueprint, request, jsonify, current_app, Response, stream_with_context
 import google.generativeai as genai
 import json
 
 from ..utils.auth import decrypt_value
-from ..models.models import db, APIKey, ConfiguredModel, DataSource # Import DataSource
+from ..models.models import db, APIKey, ConfiguredModel, DataSource
 
 chat_bp = Blueprint('chat_api_routes', __name__)
 
-@chat_bp.route('/available-models', methods=['GET'])
+# ✅ CRUCIAL FIX: Add trailing slash
+@chat_bp.route('/available-models/', methods=['GET'])
 def get_available_chat_models():
     available_models_from_db = []
     try:
@@ -41,37 +43,28 @@ def get_available_chat_models():
         current_app.logger.error(f"Error fetching available models from DB: {e}", exc_info=True)
         return jsonify({"error": "Could not retrieve available models", "details": str(e)}), 500
 
-
-@chat_bp.route('/', methods=['POST','OPTIONS'])
+# ✅ Simplified this route; the global CORS in __init__.py handles OPTIONS correctly now
+@chat_bp.route('/', methods=['POST'])
 def chat_handler():
-    if request.method == 'OPTIONS':
-        response = jsonify(success=True)
-        response.headers.add("Access-Control-Allow-Origin", "*") 
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
-        response.headers.add("Access-Control-Allow-Methods", "POST,OPTIONS")
-        return response, 200
+    # The OPTIONS preflight is now handled by the global CORS configuration.
+    # No need for the `if request.method == 'OPTIONS':` block.
 
     data = request.get_json()
     user_query = data.get('query')
     selected_model_id_from_frontend = data.get('model')
-    data_source_id = data.get('data_source_id') # Get the data_source_id
+    data_source_id = data.get('data_source_id')
 
     if not user_query: return jsonify({"error": "Missing query"}), 400
     if not selected_model_id_from_frontend: return jsonify({"error": "Missing model selection"}), 400
     
-    # Check for data_source_id (if required, for now just log)
     if not data_source_id:
         current_app.logger.warning("Chat request received without a selected data_source_id.")
     else:
-        # Fetch the DataSource and log it (placeholder for RAG)
-        selected_data_source = db.session.query(DataSource).get(data_source_id)
+        selected_data_source = db.session.get(DataSource, data_source_id)
         if selected_data_source:
             current_app.logger.info(f"Chat initiated for data source: {selected_data_source.name} (ID: {data_source_id})")
-            # Here is where RAG logic would go: fetch content based on data_source_id,
-            # retrieve relevant chunks, and inject into the prompt.
         else:
             current_app.logger.warning(f"Data source with ID {data_source_id} not found for chat request.")
-
 
     db_model_config = db.session.query(ConfiguredModel).filter_by(
         model_id_string=selected_model_id_from_frontend, 
@@ -127,9 +120,7 @@ def chat_handler():
                     yield f"data: {error_payload}\n\n"
 
             response = Response(stream_with_context(generate_stream_chunks()), mimetype='text/event-stream')
-            response.headers.add("Access-Control-Allow-Origin", "*")
-            response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
-            response.headers.add("Access-Control-Allow-Methods", "POST,OPTIONS")
+            # These headers are for SSE and are handled differently from CORS headers, so they are fine here.
             response.headers.add("Cache-Control", "no-cache")
             response.headers.add("X-Accel-Buffering", "no")
             return response
