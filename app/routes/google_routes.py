@@ -49,7 +49,7 @@ def get_google_auth_url(current_admin_username):
     session['google_oauth_state'] = state # Store state in Flask session
     return jsonify({'authorization_url': authorization_url})
 
-@google_bp.route('/connect/google/callback', methods=['GET'])
+@google_bp.route('/callback', methods=['GET'])
 def google_callback():
     # ✅ Verify state to prevent CSRF attacks
     expected_state = session.pop('google_oauth_state', None)
