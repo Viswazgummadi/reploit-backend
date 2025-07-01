@@ -2,15 +2,16 @@
 import datetime
 import jwt
 from functools import wraps
-from flask import request, jsonify, current_app # Import current_app
+from flask import request, jsonify, current_app, g # Import g
 from cryptography.fernet import InvalidToken as FernetInvalidToken
 
 # Import models relative to the 'app' package
 from ..models.models import AdminUser 
 # fernet_cipher will be accessed via current_app.fernet_cipher
+from .. import db # Ensure db is imported correctly
 
 def encrypt_value(value: str) -> str | None:
-    fernet = current_app.fernet_cipher # Access from current_app
+    fernet = current_app.fernet_cipher 
     if not fernet or not value: 
         current_app.logger.warning("Encryption skipped: Fernet not available or no value.")
         return None
@@ -21,7 +22,7 @@ def encrypt_value(value: str) -> str | None:
         return None
 
 def decrypt_value(encrypted_value: str) -> str | None:
-    fernet = current_app.fernet_cipher # Access from current_app
+    fernet = current_app.fernet_cipher 
     if not fernet or not encrypted_value: 
         current_app.logger.warning("Decryption skipped: Fernet not available or no value.")
         return None
@@ -51,17 +52,17 @@ def token_required(f):
             return jsonify({'message': 'Token is missing!'}), 401
         
         try:
-            # Use JWT settings from app.config
             jwt_secret = current_app.config['JWT_SECRET_KEY']
             jwt_algo = current_app.config['JWT_ALGORITHM']
             
             data = jwt.decode(token, jwt_secret, algorithms=[jwt_algo])
-            admin_user = db.session.query(AdminUser).filter_by(username=data['sub']).first() # Query db directly
+            admin_user = db.session.query(AdminUser).filter_by(username=data['sub']).first()
             if not admin_user:
                 current_app.logger.warning(f"User '{data['sub']}' specified in token not found.")
                 raise jwt.InvalidTokenError("User specified in token not found.")
             
-            # Pass the username (identity) to the decorated function
+            # Store the user object in Flask's global request context (g) for easy access
+            g.current_user = admin_user
             current_user_identity = admin_user.username 
             
         except jwt.ExpiredSignatureError:
@@ -76,6 +77,3 @@ def token_required(f):
             
         return f(current_user_identity, *args, **kwargs)
     return decorated
-
-# You might need to import db for the query in token_required
-from .. import db

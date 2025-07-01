@@ -1,33 +1,35 @@
 # backend/app/routes/data_source_routes.py
 
 from flask import Blueprint, request, jsonify, current_app
-# from flask_cors import CORS # ✅ REMOVED: Rely on global CORS config in __init__.py
+from flask_cors import CORS 
 from ..models import db, DataSource
 from ..utils.auth import token_required
-from flask_cors import CORS
+from ..tasks.repo_ingestion_tasks import process_data_source_for_ai # Import the Celery task
+from .. import celery_app # Import the celery_app instance for checking task status
+
 data_source_bp = Blueprint('data_source_api_routes', __name__,url_prefix='/api/data-sources')
 CORS(data_source_bp, supports_credentials=True)
-# ✅ REMOVED: CORS(data_source_bp, supports_credentials=True)
-# This is now handled by the global CORS configuration in your app factory (__init__.py)
 
 @data_source_bp.route('/', methods=['GET'])
-def get_data_sources():
+@token_required
+def get_data_sources(current_admin_username):
     """
     Fetches all connected data sources from the database.
-    This route is called as /api/data-sources/, so this definition is correct.
+    This route is protected and requires an admin token.
     """
     try:
+        # In a real multi-user app, you might filter by user_id
         sources = DataSource.query.order_by(DataSource.created_at.desc()).all()
         return jsonify([source.to_dict() for source in sources]), 200
     except Exception as e:
-        current_app.logger.error(f"Error fetching data sources: {e}", exc_info=True)
+        current_app.logger.error(f"Error fetching data sources for user '{current_admin_username}': {e}", exc_info=True)
         return jsonify({"error": "Failed to retrieve data sources"}), 500
 
-# ✅ CRUCIAL FIX: Add trailing slash
 @data_source_bp.route('/connect/', methods=['POST'])
-def connect_data_source():
+@token_required
+def connect_data_source(current_admin_username):
     """
-    Creates a new DataSource record for any supported source type.
+    Creates a new DataSource record and triggers the background ingestion task.
     """
     data = request.get_json()
     if not data:
@@ -45,6 +47,7 @@ def connect_data_source():
         return jsonify({"error": f"Source type '{source_type}' is not supported."}), 400
 
     try:
+        # Check if the data source already exists
         existing_source = None
         if source_type == 'github':
             repo_full_name = connection_details.get('repo_full_name')
@@ -52,49 +55,102 @@ def connect_data_source():
                 existing_source = db.session.query(DataSource).filter(
                     DataSource.connection_details['repo_full_name'].as_string() == repo_full_name
                 ).first()
-        elif source_type == 'google_drive':
-            file_id = connection_details.get('file_id')
-            if file_id:
-                existing_source = db.session.query(DataSource).filter(
-                    DataSource.connection_details['file_id'].as_string() == file_id
-                ).first()
+        # Add similar checks for other source types if needed
 
         if existing_source:
             return jsonify({"error": f"This data source is already connected."}), 409
 
+        # Create the new source with 'pending' status
         new_source = DataSource(
             name=name,
             source_type=source_type,
             connection_details=connection_details,
-            status='pending_indexing'
+            status='pending'
         )
         
         db.session.add(new_source)
         db.session.commit()
         
-        current_app.logger.info(f"Successfully connected new data source: {new_source.name} ({new_source.id})")
-        return jsonify(new_source.to_dict()), 201
+        current_app.logger.info(f"User '{current_admin_username}' connected new data source: {new_source.name} ({new_source.id}). Triggering background processing.")
+        
+        # Trigger the Celery background task. .delay() sends it to the message queue.
+        # We don't wait for it to finish, so the API responds instantly.
+        task = process_data_source_for_ai.delay(new_source.id) 
+
+        # Return the new source object along with the task ID for optional frontend polling
+        response_data = new_source.to_dict()
+        response_data['task_id'] = task.id
+        
+        return jsonify(response_data), 201
 
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error connecting data source: {e}", exc_info=True)
         return jsonify({"error": "Failed to connect new data source"}), 500
 
+@data_source_bp.route('/<string:data_source_id>/reindex/', methods=['POST'])
+@token_required
+def reindex_data_source(current_admin_username, data_source_id):
+    """
+    Initiates a full re-indexing process for an existing data source.
+    """
+    source = db.session.get(DataSource, data_source_id)
+    if source is None:
+        return jsonify({"error": "Data source not found"}), 404
+    
+    # Immediately update the status to 'indexing' for instant UI feedback
+    source.status = 'indexing'
+    db.session.add(source)
+    db.session.commit()
+    
+    current_app.logger.info(f"Admin '{current_admin_username}' requested re-indexing for data source: {data_source_id}. Triggering background task.")
+    
+    # Trigger the same background task for re-indexing
+    task = process_data_source_for_ai.delay(data_source_id) 
+
+    return jsonify({"message": f"Re-indexing initiated for {source.name}.", "task_id": task.id}), 202
+
+@data_source_bp.route('/<string:data_source_id>/sync/', methods=['POST'])
+@token_required
+def sync_data_source(current_admin_username, data_source_id):
+    """
+    Initiates a sync process. For now, it triggers a full re-index.
+    """
+    source = db.session.get(DataSource, data_source_id)
+    if source is None:
+        return jsonify({"error": "Data source not found"}), 404
+    
+    # Immediately update the status to 'indexing'
+    source.status = 'indexing'
+    db.session.add(source)
+    db.session.commit()
+    
+    current_app.logger.info(f"Admin '{current_admin_username}' requested sync for data source: {data_source_id}. Triggering background task.")
+    
+    task = process_data_source_for_ai.delay(data_source_id) 
+
+    return jsonify({"message": f"Sync initiated for {source.name}.", "task_id": task.id}), 202
+
 @data_source_bp.route('/<string:data_source_id>', methods=['DELETE'])
-def delete_data_source(data_source_id):
+@token_required
+def delete_data_source(current_admin_username, data_source_id):
     """
     Deletes a connected data source from the database.
-    This route with a dynamic ID at the end should NOT have a trailing slash.
     """
     try:
         source_to_delete = db.session.get(DataSource, data_source_id)
         if source_to_delete is None:
             return jsonify({"error": "Data source not found"}), 404
             
+        # TODO: In future steps, trigger a Celery task here to clean up:
+        # 1. The cloned repository folder from the server.
+        # 2. All associated nodes and relationships from the Neo4j Knowledge Graph.
+        # 3. All associated vectors from the ChromaDB Vector Database.
+
         db.session.delete(source_to_delete)
         db.session.commit()
         
-        current_app.logger.info(f"Successfully deleted data source: {source_to_delete.name} ({data_source_id})")
+        current_app.logger.info(f"Admin '{current_admin_username}' successfully deleted data source: {source_to_delete.name} ({data_source_id}).")
         return '', 204
 
     except Exception as e:
@@ -102,50 +158,19 @@ def delete_data_source(data_source_id):
         current_app.logger.error(f"Error deleting data source {data_source_id}: {e}", exc_info=True)
         return jsonify({"error": "Failed to delete data source"}), 500
 
-# ✅ CRUCIAL FIX: Add trailing slash
-@data_source_bp.route('/<string:data_source_id>/reindex/', methods=['POST'])
+# NEW ROUTE: To check the status of a background task
+@data_source_bp.route('/task-status/<string:task_id>/', methods=['GET'])
 @token_required
-def reindex_data_source(current_admin_username, data_source_id):
+def get_task_status(current_admin_username, task_id):
     """
-    Initiates a full re-indexing process for a data source.
+    Retrieves the current status and result of a Celery task, allowing the frontend to poll for progress.
     """
-    source = db.session.get(DataSource, data_source_id)
-    if source is None:
-        return jsonify({"error": "Data source not found"}), 404
+    task = celery_app.AsyncResult(task_id)
     
-    current_app.logger.info(f"Admin '{current_admin_username}' requested re-indexing for data source: {data_source_id}")
-    return jsonify({"message": f"Re-indexing request for {source.name} received. Processing will begin shortly."}), 200
-
-# ✅ CRUCIAL FIX: Add trailing slash
-@data_source_bp.route('/<string:data_source_id>/sync/', methods=['POST'])
-@token_required
-def sync_data_source(current_admin_username, data_source_id):
-    """
-    Initiates a sync process for a data source to update changes.
-    """
-    source = db.session.get(DataSource, data_source_id)
-    if source is None:
-        return jsonify({"error": "Data source not found"}), 404
+    response_data = {
+        'task_id': task.id,
+        'state': task.state, # PENDING, STARTED, SUCCESS, FAILURE, RETRY
+        'info': task.info,   # This will contain the return value on SUCCESS or the error on FAILURE
+    }
     
-    current_app.logger.info(f"Admin '{current_admin_username}' requested sync for data source: {data_source_id}")
-    return jsonify({"message": f"Sync request for {source.name} received. Changes will be processed."}), 200
-
-# ✅ CRUCIAL FIX: Add trailing slash
-@data_source_bp.route('/<string:data_source_id>/delete-embeddings/', methods=['DELETE'])
-@token_required
-def delete_source_embeddings(current_admin_username, data_source_id):
-    """
-    Deletes the generated embeddings for a data source, but keeps the connection record.
-    """
-    source = db.session.get(DataSource, data_source_id)
-    if source is None:
-        return jsonify({"error": "Data source not found"}), 404
-    
-    current_app.logger.info(f"Admin '{current_admin_username}' requested embedding deletion for data source: {data_source_id}")
-    return jsonify({"message": f"Embeddings for {source.name} deleted successfully."}), 200
-
-# ✅ CRUCIAL FIX: Add trailing slash
-@data_source_bp.route('/test/', methods=['GET'])
-def test_route():
-    current_app.logger.info("Test route hit!")
-    return jsonify({"message": "Test successful!"}), 200
+    return jsonify(response_data), 200
