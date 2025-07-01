@@ -17,28 +17,53 @@ CORS(admin_bp, supports_credentials=True)
 
 @admin_bp.route('/login/', methods=['POST'])
 def admin_login():
-    data = request.get_json()
-    if not data: return jsonify({"error": "Missing JSON data"}), 400
-    username_attempt = data.get('username')
-    password_attempt = data.get('password')
-    if not username_attempt or not password_attempt:
-        return jsonify({"error": "Missing username or password"}), 400
+    current_app.logger.info("Admin login route hit.")
+    try:
+        data = request.get_json()
+        current_app.logger.info(f"Request data: {data}")
 
-    admin_user = db.session.query(AdminUser).filter_by(username=username_attempt).first()
-    if admin_user and bcrypt.check_password_hash(admin_user.password_hash, password_attempt):
-        token_payload = {
-            'sub': admin_user.username,
-            'iat': datetime.datetime.utcnow(),
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(seconds=current_app.config['JWT_EXP_DELTA_SECONDS'])
-        }
-        try:
-            access_token = jwt.encode(token_payload, current_app.config['JWT_SECRET_KEY'], algorithm=current_app.config['JWT_ALGORITHM'])
-            return jsonify({"message": "Admin login successful", "token": access_token}), 200
-        except Exception as e:
-            current_app.logger.error(f"Error encoding JWT: {e}")
-            return jsonify({"error": "Could not generate token"}), 500
-    else:
-        return jsonify({"error": "Invalid admin credentials"}), 401
+        if not data:
+            current_app.logger.warning("Missing JSON data in request.")
+            return jsonify({"error": "Missing JSON data"}), 400
+
+        username_attempt = data.get('username')
+        password_attempt = data.get('password')
+
+        if not username_attempt or not password_attempt:
+            current_app.logger.warning("Missing username or password in request data.")
+            return jsonify({"error": "Missing username or password"}), 400
+        
+        current_app.logger.info(f"Attempting login for username: {username_attempt}")
+
+        admin_user = db.session.query(AdminUser).filter_by(username=username_attempt).first()
+        
+        if admin_user:
+            current_app.logger.info(f"Admin user '{username_attempt}' found in database.")
+            if bcrypt.check_password_hash(admin_user.password_hash, password_attempt):
+                current_app.logger.info(f"Password check successful for '{username_attempt}'.")
+                token_payload = {
+                    'sub': admin_user.username,
+                    'iat': datetime.datetime.utcnow(),
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(seconds=current_app.config['JWT_EXP_DELTA_SECONDS'])
+                }
+                try:
+                    current_app.logger.info("Attempting to encode JWT.")
+                    access_token = jwt.encode(token_payload, current_app.config['JWT_SECRET_KEY'], algorithm=current_app.config['JWT_ALGORITHM'])
+                    current_app.logger.info("JWT encoded successfully.")
+                    return jsonify({"message": "Admin login successful", "token": access_token}), 200
+                except Exception as e:
+                    current_app.logger.error(f"Error encoding JWT: {e}", exc_info=True)
+                    return jsonify({"error": "Could not generate token"}), 500
+            else:
+                current_app.logger.warning(f"Invalid password for admin user '{username_attempt}'.")
+                return jsonify({"error": "Invalid admin credentials"}), 401
+        else:
+            current_app.logger.warning(f"Admin user '{username_attempt}' not found.")
+            return jsonify({"error": "Invalid admin credentials"}), 401
+            
+    except Exception as e:
+        current_app.logger.error(f"Unhandled exception in admin_login: {e}", exc_info=True)
+        return jsonify({"error": "An internal server error occurred"}), 500
 
 # --- Admin Profile ---
 @admin_bp.route('/profile/', methods=['GET'])

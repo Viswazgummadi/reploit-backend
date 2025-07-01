@@ -1,4 +1,5 @@
 # backend/app/__init__.py
+
 import os
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
@@ -7,17 +8,17 @@ from flask_cors import CORS
 from flask_migrate import Migrate
 from cryptography.fernet import Fernet
 from datetime import timedelta
-from celery import Celery # 1. Import Celery
+from celery import Celery
 
 db = SQLAlchemy()
 bcrypt = Bcrypt()
 migrate = Migrate()
-celery_app = None # 2. Declare celery_app globally so other files can import it
+celery_app = None
 
 def create_app(config_object_path='config.Config'):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_object_path)
-    
+
     # Create the directory for cloned repos if it doesn't exist
     if not os.path.exists(app.config['REPO_CLONE_PATH']):
         os.makedirs(app.config['REPO_CLONE_PATH'])
@@ -26,7 +27,12 @@ def create_app(config_object_path='config.Config'):
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=15)
     app.config['SESSION_COOKIE_SAMESITE'] = 'None'
     app.config['SESSION_COOKIE_SECURE'] = True 
-    CORS(app)
+    
+    # --- START OF CHANGE ---
+    # Replace the old CORS(app) line with this more specific configuration
+    origins = app.config.get('CORS_ORIGINS', 'http://localhost:5173').split(',')
+    CORS(app, supports_credentials=True, origins=origins)
+    # --- END OF CHANGE ---
     
     try:
         os.makedirs(app.instance_path)
@@ -46,7 +52,6 @@ def create_app(config_object_path='config.Config'):
     with app.app_context():
         from .models import models
 
-    # 3. Configure and initialize Celery
     global celery_app
     celery_app = Celery(
         app.import_name,
@@ -55,13 +60,11 @@ def create_app(config_object_path='config.Config'):
     )
     celery_app.conf.update(app.config)
 
-    # This boilerplate ensures Celery tasks can access things from our Flask app, like the database (db).
     class ContextTask(celery_app.Task):
         def __call__(self, *args, **kwargs):
             with app.app_context():
                 return self.run(*args, **kwargs)
     celery_app.Task = ContextTask
-    # --- End Celery Config ---
 
     # Import and register blueprints
     from .routes.general_routes import general_bp
